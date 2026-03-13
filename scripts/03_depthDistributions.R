@@ -69,7 +69,7 @@ labels$RCNL <- wrap_elements(full = grid::textGrob(
   gp = gpar(fontsize = labelTextSize, fontface = "bold")
 ))
 labels$CAMC <- wrap_elements(full = grid::textGrob(
-  "Fir and Pine Forest (FPF)",
+  "Fir/Pine Forest (FPF)",
   gp = gpar(fontsize = labelTextSize, fontface = "bold")
 ))
 labels$CASD <- wrap_elements(full = grid::textGrob("Desert (DS)", gp = gpar(

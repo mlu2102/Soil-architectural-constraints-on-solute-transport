@@ -28,13 +28,14 @@ filepaths$raw$downslopeACI <- "data/raw/downslopeACI.csv"
 filepaths$raw$asd <- "data/raw/asd.csv"
 filepaths$raw$eoc <- "data/raw/eoc.csv"
 filepaths$raw$soc <- "data/raw/soc.csv"
+filepaths$raw$slidingFrame <- "data/raw/depthDistribution.csv"
 filepaths$raw$texture <- "data/raw/texture.csv"
 
 filepaths$intermediate$deepACI <- "data/intermediate/deepACI.rds"
 filepaths$intermediate$downslopeACI <- "data/intermediate/downslopeACI.rds"
 
-filepaths$plots$arealClayContent <- "output/plots/Fig4_arealClayContent.png"
-filepaths$plots$aggSize <- "output/plots/Fig5_aggSize.png"
+filepaths$plots$arealClayContent <- "output/plots/Fig4_arealClayContent.tiff"
+filepaths$plots$aggSize <- "output/plots/Fig5_aggSize.tiff"
 filepaths$plots$meanClayConcentration <- "output/plots/S9_meanClayConcentration.png"
 
 filepaths$plots$clayConcentration_unscaled <- "output/plots/S1_clayConcentration.png"
@@ -43,11 +44,14 @@ filepaths$plots$aggSize_unscaled <- "output/plots/S3_aggSize.png"
 filepaths$plots$soc <- "output/plots/S4_soc.png"
 filepaths$plots$eoc <- "output/plots/S6_eoc.png"
 
+filepaths$plots$slidingFrame <- "output/plots/Fig8_ObservationFrame.png"
+
 # Load data ---------------------------------------------------------------
 
 deepACI <- list()
 downslopeACI   <- list()
 metricRanges <- list()
+slidingFrame <- list()
 
 deepACI$raw <- read_csv(filepaths$raw$deepACI)
 downslopeACI$raw <- read_csv(filepaths$raw$downslopeACI)
@@ -59,6 +63,8 @@ metricRanges$asd$raw <- read_csv(filepaths$raw$asd)
 metricRanges$eoc$raw <- read_csv(filepaths$raw$eoc)
 metricRanges$soc$raw <- read_csv(filepaths$raw$soc)
 metricRanges$texture$raw <- read_csv(filepaths$raw$texture)
+
+slidingFrame$raw <- read_csv(filepaths$raw$slidingFrame)
 
 
 # Aesthetic definitions ---------------------------------------------------
@@ -112,6 +118,11 @@ ecosystemColors <- c(
 #   The original plot, annotated with the associated model's p-value and
 #   regression coefficient
 
+inputPlot = downslopeACI$plots$aggSize$model
+inputData = downslopeACI
+inputXVar = "aggSize"
+inputYVar = "downslopeACI"
+
 annotatePlot <- function(inputPlot,
                          inputData,
                          inputXVar,
@@ -146,8 +157,8 @@ annotatePlot <- function(inputPlot,
       pull(p)
     
     if(length(jAll) >1){
-      minJ <- round(min(jAll), digits = 2)
-      maxJ <- round(max(jAll), digits = 2)
+      minJ <- signif((min(jAll)), digits = 1)
+      maxJ <- signif((max(jAll)), digits = 1)
       
       if(minJ < 0.001){
         minJ <- "< 0.001"
@@ -155,6 +166,7 @@ annotatePlot <- function(inputPlot,
       if(maxJ < 0.001){
         maxJ <- "< 0.001"
       }
+      
       
       jMinSuffix <- case_when(minJ > 0.05 ~ "", 
                               minJ <= 0.05 & minJ > 0.01 ~ "*",
@@ -168,7 +180,7 @@ annotatePlot <- function(inputPlot,
                               maxJ <= 0.001 ~ "***")
 
       
-      jLab <- paste0(minJ,jMinSuffix,", ",maxJ,jMaxSuffix)
+      jLab <- paste0(minJ,jMinSuffix)
       
       
     }
@@ -184,19 +196,18 @@ annotatePlot <- function(inputPlot,
   
     }
     
-    jLab <- paste0("(",jLab,")")
   }
   
   
   
-  pLab <- paste0("p = ", p, pSuffix," ", jLab)  
+  pLab <- paste0("p = ",jLab," (",p, pSuffix,")")  
   mLab <- paste0("slope = ", m)
   
   outputPlot <- inputPlot +
     annotate("text",
       x = xmax - pad_x,
       y = ymax - pad_y,
-      label = pLab,
+      label = paste0(pLab),
       size = 3,
       hjust = 1,
       vjust = 1) +
@@ -650,6 +661,65 @@ ggsave(filepaths$plots$eoc, metricRanges$plots$eoc,
        width = 6.5, height = 1.75,
        dpi = 600)
 
+# Sliding frame -----------------------------------------------------------
+
+## Wrangling ---------------------------------------------------------------
+
+slidingFrame$int <- slidingFrame$raw  %>%
+  filter(pitID == "LUQICM") %>%
+  filter(endDepth <= 190) %>%
+  mutate(depth = map2(startDepth, endDepth - 1, ~seq(.x, .y))) %>%
+  unnest(depth)  %>%
+  select(-c(startDepth, endDepth))
+
+slidingFrame$pd <- tibble(
+  startDepth = numeric(100),
+  endDepth = numeric(100),
+  meanBotACI = numeric(100),
+  meanTopACI = numeric(100),
+  deepACI = numeric(100))
+
+for (i in 5:15){
+  slidingFrame$temp$sDepth = i *10
+  slidingFrame$temp$eDepth =   slidingFrame$temp$sDepth + 50
+  
+  slidingFrame$temp$df <- slidingFrame$int %>%
+    filter(depth >=   slidingFrame$temp$sDepth & depth <= slidingFrame$temp$eDepth) %>%
+    summarise(meanACI = mean(aci, na.rm = TRUE))  %>%
+    pull(meanACI)
+  
+  
+  slidingFrame$pd$startDepth[i] <-   slidingFrame$temp$sDepth
+  slidingFrame$pd$endDepth[i] <-   slidingFrame$temp$eDepth
+  slidingFrame$pd$meanBotACI[i] <-   slidingFrame$temp$df
+}
+
+## Plot --------------------------------------------------------------------
+
+slidingFrame$plot <- slidingFrame$pd %>%
+  filter(startDepth != 0) %>%
+  mutate(rng = (startDepth+25)) %>%
+  arrange(startDepth) %>%
+  mutate(includes = case_when(startDepth > 100 ~ TRUE,
+                              TRUE ~ FALSE)) %>%
+  ggplot()+
+  geom_point(aes(x = rng, y = meanBotACI, shape = includes), size = 3)+
+  geom_vline(xintercept = 130, linetype = "dashed")+
+  xlab("Observation depth midpoint (cm)")+
+  ylab(expression(bold("Mean lower-half ACI (μg g"^-1*")"))) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ 
+  scale_shape_manual(
+    name = NULL,
+    values = c(16, 17),
+    labels = c(
+      "Spans Bt–C",
+      "Below Bt–C"))
+
+ggsave(filepaths$plots$slidingFrame, slidingFrame$plot, 
+       width = 5, height = 3,
+       dpi = 600)
+
+
 # Plot assembly -----------------------------------------------------------
 
 plots <- list()
@@ -722,11 +792,11 @@ plots$meanClayConcentration$final <- ggdraw()+
 
 ggsave(filepaths$plots$aggSize, plots$aggSize$final, 
        width = 7.5, height = 4.2, 
-       dpi = 300, bg = "white")
+       dpi = 600, bg = "white")
 
 ggsave(filepaths$plots$arealClayContent, plots$arealClayContent$final, 
        width = 7.5, height = 4.2, 
-       dpi = 300, bg = "white")
+       dpi = 600, bg = "white")
 
 ggsave(filepaths$plots$meanClayConcentration, plots$meanClayConcentration$final, 
        width = 5.5, height = 4.2, 

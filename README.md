@@ -66,6 +66,8 @@ redistribution and persistence*, submitted to *Nature Communications Earth & Env
 Figures and tables referenced in the manuscript correspond directly to outputs
 in `output/plots/` and `output/data/`, respectively
 
+[![DOI](https://zenodo.org/badge/1173784093.svg)](https://doi.org/10.5281/zenodo.18880886)
+
 ## Contact
 
 For questions regarding this repository, contact:
